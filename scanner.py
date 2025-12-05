@@ -146,7 +146,7 @@ def colorize(text: str, color: str) -> str:
 def print_banner():
     """Print the tool banner."""
     banner = f"""
-{Colors.CYAN}{Colors.BOLD}brought to you by assetnote{Colors.RESET}
+{Colors.CYAN}{Colors.BOLD}react2shell{Colors.RESET}
 """
     print(banner)
 
