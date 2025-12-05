@@ -7,25 +7,6 @@
 # ]
 # ///
 
-"""
-React2Shell Scanner - High Fidelity Detection for RSC/Next.js RCE
-CVE-2025-55182 & CVE-2025-66478
-
-Based on research from Assetnote Security Research Team.
-
-Vulnerability Details:
-- CVE-2025-55182: React Server Components insecure deserialization (CVSS 10.0)
-- CVE-2025-66478: Next.js Server Actions RCE (duplicate of CVE-2025-55182)
-
-Affected Versions:
-- React: 19.0.0, 19.1.0, 19.1.1, 19.2.0
-- Next.js: 14.3.0-canary.77 through 16.0.6
-
-Patched Versions:
-- React: 19.0.1, 19.1.2, 19.2.1
-- Next.js: 15.0.5, 15.1.9, 15.2.6, 15.3.6, 15.4.8, 15.5.7, 16.0.7
-"""
-
 import argparse
 import hashlib
 import json
