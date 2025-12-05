@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.9"
 # dependencies = [
@@ -39,7 +39,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urljoin, urlparse
 
 try:
     import requests
@@ -81,13 +81,22 @@ VULNERABLE_NEXTJS_RANGES = [
     ("16.0.0", "16.0.6"),
 ]
 
-PATCHED_NEXTJS_VERSIONS = ["15.0.5", "15.1.9", "15.2.6", "15.3.6", "15.4.8", "15.5.7", "16.0.7"]
+PATCHED_NEXTJS_VERSIONS = [
+    "15.0.5",
+    "15.1.9",
+    "15.2.6",
+    "15.3.6",
+    "15.4.8",
+    "15.5.7",
+    "16.0.7",
+]
 PATCHED_REACT_VERSIONS = ["19.0.1", "19.1.2", "19.2.1"]
 
 
 @dataclass
 class VersionInfo:
     """Stores detected version information."""
+
     nextjs_version: Optional[str] = None
     react_version: Optional[str] = None
     build_id: Optional[str] = None
@@ -100,6 +109,7 @@ class VersionInfo:
 @dataclass
 class ScanResult:
     """Comprehensive scan result."""
+
     host: str
     vulnerable: Optional[bool] = None
     status_code: Optional[int] = None
@@ -107,7 +117,9 @@ class ScanResult:
     request: Optional[str] = None
     response: Optional[str] = None
     final_url: Optional[str] = None
-    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat() + "Z")
+    timestamp: str = field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat() + "Z"
+    )
     version_info: Optional[VersionInfo] = None
     detection_method: str = "rce_poc"
     retry_count: int = 0
@@ -188,7 +200,11 @@ def parse_version(version_str: str) -> tuple:
     # Handle canary versions like "14.3.0-canary.77"
     match = re.match(r"(\d+)\.(\d+)\.(\d+)(?:-canary\.(\d+))?", version_str)
     if match:
-        major, minor, patch = int(match.group(1)), int(match.group(2)), int(match.group(3))
+        major, minor, patch = (
+            int(match.group(1)),
+            int(match.group(2)),
+            int(match.group(3)),
+        )
         canary = int(match.group(4)) if match.group(4) else 9999  # Non-canary is higher
         return (major, minor, patch, canary)
     return (0, 0, 0, 0)
@@ -240,12 +256,14 @@ def fingerprint_nextjs(
         html = response.text
 
         # Extract build ID from __NEXT_DATA__ or asset paths
-        build_match = re.search(r'/_next/static/([a-zA-Z0-9_-]+)/', html)
+        build_match = re.search(r"/_next/static/([a-zA-Z0-9_-]+)/", html)
         if build_match:
             info.build_id = build_match.group(1)
 
         # Look for __NEXT_DATA__ script which contains version info
-        next_data_match = re.search(r'<script id="__NEXT_DATA__"[^>]*>([^<]+)</script>', html)
+        next_data_match = re.search(
+            r'<script id="__NEXT_DATA__"[^>]*>([^<]+)</script>', html
+        )
         if next_data_match:
             try:
                 next_data = json.loads(next_data_match.group(1))
@@ -264,7 +282,7 @@ def fingerprint_nextjs(
 
         # Check for Server Actions indicators
         # RSC payload markers in HTML
-        if 'self.__next_f.push' in html or '$ACTION_' in html:
+        if "self.__next_f.push" in html or "$ACTION_" in html:
             info.has_server_actions = True
             info.has_app_router = True
 
@@ -277,7 +295,9 @@ def fingerprint_nextjs(
                 verify=verify_ssl,
             )
             # Look for version strings in the main chunk
-            ver_match = re.search(r'Next\.js\s*["\']?v?(\d+\.\d+\.\d+)', error_resp.text)
+            ver_match = re.search(
+                r'Next\.js\s*["\']?v?(\d+\.\d+\.\d+)', error_resp.text
+            )
             if ver_match:
                 info.nextjs_version = ver_match.group(1)
                 info.version_source = "main.js"
@@ -287,7 +307,7 @@ def fingerprint_nextjs(
         # Try x-powered-by header
         powered_by = response.headers.get("x-powered-by", "")
         if "Next.js" in powered_by:
-            ver_match = re.search(r'Next\.js\s*(\d+\.\d+\.\d+)', powered_by)
+            ver_match = re.search(r"Next\.js\s*(\d+\.\d+\.\d+)", powered_by)
             if ver_match:
                 info.nextjs_version = ver_match.group(1)
                 info.version_source = "x-powered-by"
@@ -649,7 +669,9 @@ def check_vulnerability(
         resp_str += f"\r\n{resp.text[:2000]}"
         return resp_str
 
-    def attempt_exploit(url: str, retry_count: int = 0) -> tuple[requests.Response | None, str | None, int]:
+    def attempt_exploit(
+        url: str, retry_count: int = 0
+    ) -> tuple[requests.Response | None, str | None, int]:
         """Attempt exploit with retry logic."""
         last_error = None
         for attempt in range(retry_count + 1):
@@ -662,7 +684,9 @@ def check_vulnerability(
             last_error = error
 
             # Only retry on transient errors
-            if attempt < retry_count and any(x in str(error).lower() for x in ["timeout", "connection"]):
+            if attempt < retry_count and any(
+                x in str(error).lower() for x in ["timeout", "connection"]
+            ):
                 time.sleep(retry_delay)
             else:
                 break
@@ -736,7 +760,9 @@ def load_hosts(hosts_file: str) -> list[str]:
     return hosts
 
 
-def save_results(results: list[ScanResult], output_file: str, vulnerable_only: bool = True):
+def save_results(
+    results: list[ScanResult], output_file: str, vulnerable_only: bool = True
+):
     """Save scan results to JSON file."""
     result_dicts = [r.to_dict() if isinstance(r, ScanResult) else r for r in results]
 
@@ -760,7 +786,9 @@ def save_results(results: list[ScanResult], output_file: str, vulnerable_only: b
         print(colorize(f"\n[ERROR] Failed to save results: {e}", Colors.RED))
 
 
-def print_result(result: ScanResult | dict, verbose: bool = False, show_version: bool = True):
+def print_result(
+    result: ScanResult | dict, verbose: bool = False, show_version: bool = True
+):
     """Print scan result to console."""
     if isinstance(result, ScanResult):
         host = result.host
@@ -784,11 +812,17 @@ def print_result(result: ScanResult | dict, verbose: bool = False, show_version:
     if vulnerable is True:
         status = colorize("[VULNERABLE]", Colors.RED + Colors.BOLD)
         cve_info = colorize("CVE-2025-55182", Colors.YELLOW)
-        print(f"{status} {colorize(host, Colors.WHITE)} - Status: {status_code} ({cve_info})")
+        print(
+            f"{status} {colorize(host, Colors.WHITE)} - Status: {status_code} ({cve_info})"
+        )
         if redirected:
             print(f"  -> Redirected to: {final_url}")
         if show_version and version_info:
-            vi = version_info if isinstance(version_info, VersionInfo) else VersionInfo(**version_info)
+            vi = (
+                version_info
+                if isinstance(version_info, VersionInfo)
+                else VersionInfo(**version_info)
+            )
             if vi.nextjs_version:
                 print(f"  -> Next.js version: {vi.nextjs_version}")
             if vi.has_server_actions:
@@ -798,9 +832,15 @@ def print_result(result: ScanResult | dict, verbose: bool = False, show_version:
         status_str = f"Status: {status_code}" if status_code else ""
         print(f"{status} {host} {status_str}".strip())
         if show_version and version_info:
-            vi = version_info if isinstance(version_info, VersionInfo) else VersionInfo(**version_info)
+            vi = (
+                version_info
+                if isinstance(version_info, VersionInfo)
+                else VersionInfo(**version_info)
+            )
             if vi.nextjs_version:
-                ver_color = Colors.GREEN if not vi.potentially_vulnerable else Colors.YELLOW
+                ver_color = (
+                    Colors.GREEN if not vi.potentially_vulnerable else Colors.YELLOW
+                )
                 print(f"  -> Next.js version: {colorize(vi.nextjs_version, ver_color)}")
         if redirected and verbose:
             print(f"  -> Redirected to: {final_url}")
@@ -1013,11 +1053,22 @@ Affected Versions:
         else:
             print(colorize("[*] Using RCE PoC check", Colors.CYAN))
             if args.payload_variant != 1:
-                print(colorize(f"[*] Using payload variant {args.payload_variant}", Colors.CYAN))
+                print(
+                    colorize(
+                        f"[*] Using payload variant {args.payload_variant}", Colors.CYAN
+                    )
+                )
         if args.windows:
-            print(colorize("[*] Windows mode enabled (PowerShell payload)", Colors.CYAN))
+            print(
+                colorize("[*] Windows mode enabled (PowerShell payload)", Colors.CYAN)
+            )
         if args.waf_bypass:
-            print(colorize(f"[*] WAF bypass enabled ({args.waf_bypass_size}KB junk data)", Colors.CYAN))
+            print(
+                colorize(
+                    f"[*] WAF bypass enabled ({args.waf_bypass_size}KB junk data)",
+                    Colors.CYAN,
+                )
+            )
         if args.callback_url:
             print(colorize(f"[*] Callback URL: {args.callback_url}", Colors.CYAN))
         if not args.no_fingerprint and not args.fingerprint_only:
@@ -1036,6 +1087,7 @@ Affected Versions:
 
     if args.insecure:
         import urllib3
+
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
     def scan_host(host: str) -> ScanResult:
@@ -1043,7 +1095,9 @@ Affected Versions:
         if args.fingerprint_only:
             # Only fingerprint, no exploit
             normalized = normalize_host(host)
-            version_info = fingerprint_nextjs(normalized, timeout, verify_ssl, custom_headers)
+            version_info = fingerprint_nextjs(
+                normalized, timeout, verify_ssl, custom_headers
+            )
             result = ScanResult(host=host)
             result.version_info = version_info
             result.detection_method = "fingerprint_only"
@@ -1071,7 +1125,11 @@ Affected Versions:
         )
 
     def get_vulnerable(result: ScanResult) -> bool:
-        return result.vulnerable if isinstance(result, ScanResult) else result.get("vulnerable")
+        return (
+            result.vulnerable
+            if isinstance(result, ScanResult)
+            else result.get("vulnerable")
+        )
 
     def get_error(result: ScanResult) -> str | None:
         return result.error if isinstance(result, ScanResult) else result.get("error")
@@ -1132,12 +1190,16 @@ Affected Versions:
         print(f"  Total hosts scanned: {len(hosts)}")
 
         if vulnerable_count > 0:
-            print(f"  {colorize(f'Vulnerable: {vulnerable_count}', Colors.RED + Colors.BOLD)}")
+            print(
+                f"  {colorize(f'Vulnerable: {vulnerable_count}', Colors.RED + Colors.BOLD)}"
+            )
         else:
             print(f"  Vulnerable: {vulnerable_count}")
 
         if potentially_vulnerable_count > 0 and args.fingerprint_only:
-            print(f"  {colorize(f'Potentially vulnerable: {potentially_vulnerable_count}', Colors.YELLOW)}")
+            print(
+                f"  {colorize(f'Potentially vulnerable: {potentially_vulnerable_count}', Colors.YELLOW)}"
+            )
 
         print(f"  Not vulnerable: {len(hosts) - vulnerable_count - error_count}")
         print(f"  Errors: {error_count}")
