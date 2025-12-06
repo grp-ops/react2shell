@@ -1,7 +1,7 @@
 # React2Shell
 
 CLI tool + Nuclei templates for detecting two critical RCE vulnerabilities in React Server Components and Next.js Server Actions.  
-The scanner was rewritten after the extent of the vulnerability became apparent.
+The scanner was rewritten based on the disclosed react2shell vuln. 
 
 ## Vulnerability Overview
 
